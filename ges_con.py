@@ -7,33 +7,38 @@ from ctypes import cast, POINTER
 from comtypes import CLSCTX_ALL
 from google.protobuf.json_format import MessageToDict
 import os
+import keyboard
 
 pyautogui.FAILSAFE = False
 mp_drawing = mp.solutions.drawing_utils
 mp_hands = mp.solutions.hands
-class Gest(IntEnum):
+class Gesture(IntEnum):
     FIST = 0
     PINKY = 1
     RING = 2
     MID = 4
+    MIDRING = 6
+    LAST2=3
     LAST3 = 7
     INDEX = 8
+    FIRSTLAST = 9
     FIRST2 = 12
+    FIRST3 = 14
     LAST4 = 15
-    THUMB = 16    
+    THUMB = 16   
     PALM = 31
-    V_GEST = 33
+    V_GESTURE = 33
     TWO_FINGER_CLOSED = 34
-    PINCH_MAJOR = 35
-    PINCH_MINOR = 36
-class HLabel(IntEnum):
-    MINOR = 0
-    MAJOR = 1
+    PINCH_Maj = 35
+    PINCH_Min = 36
+class Hand_Label(IntEnum):
+    Min = 0
+    Maj = 1
 class HandRecog:    
     def __init__(self, hand_label):
         self.finger = 0
-        self.ori_gesture = Gest.PALM
-        self.prev_gesture = Gest.PALM
+        self.ori_gesture = Gesture.PALM
+        self.prev_gesture = Gesture.PALM
         self.frame_count = 0
         self.hand_result = None
         self.hand_label = hand_label
@@ -55,7 +60,6 @@ class HandRecog:
         dist += (self.hand_result.landmark[point[0]].y - self.hand_result.landmark[point[1]].y)**2
         dist = math.sqrt(dist)
         return dist
-    
     def get_dz(self,point):
         return abs(self.hand_result.landmark[point[0]].z - self.hand_result.landmark[point[1]].z)
    
@@ -77,25 +81,25 @@ class HandRecog:
                 self.finger = self.finger | 1
     def get_gesture(self):
         if self.hand_result == None:
-            return Gest.PALM
-        current_gesture = Gest.PALM
-        if self.finger in [Gest.LAST3,Gest.LAST4] and self.get_dist([8,4]) < 0.05:
-            if self.hand_label == HLabel.MINOR :
-                current_gesture = Gest.PINCH_MINOR
+            return Gesture.PALM
+        current_gesture = Gesture.PALM
+        if self.finger in [Gesture.LAST3,Gesture.LAST4] and self.get_dist([8,4]) < 0.05:
+            if self.hand_label == Hand_Label.Min :
+                current_gesture = Gesture.PINCH_Min
             else:
-                current_gesture = Gest.PINCH_MAJOR
-        elif Gest.FIRST2 == self.finger :
+                current_gesture = Gesture.PINCH_Maj
+        elif Gesture.FIRST2 == self.finger :
             point = [[8,12],[5,9]]
             dist1 = self.get_dist(point[0])
             dist2 = self.get_dist(point[1])
             ratio = dist1/dist2
             if ratio > 1.7:
-                current_gesture = Gest.V_GEST
+                current_gesture = Gesture.V_GESTURE
             else:
                 if self.get_dz([8,12]) < 0.1:
-                    current_gesture =  Gest.TWO_FINGER_CLOSED
+                    current_gesture =  Gesture.TWO_FINGER_CLOSED
                 else:
-                    current_gesture =  Gest.MID
+                    current_gesture =  Gesture.MID
         else:
             current_gesture =  self.finger
         if current_gesture == self.prev_gesture:
@@ -135,9 +139,15 @@ class Controller:
     def shutdown():
         return os.system("shutdown /s /t 1")
     
+    def close():
+        return keyboard.press_and_release("alt + f4")
+    
+    def switchtab():
+        return keyboard.press_and_release("alt + tab")
+    
     def restart():
         return os.system("shutdown /r /t 1")
-
+    
     def scrollVertical():
         pyautogui.scroll(120 if Controller.pinchlv>0.0 else -120)
     
@@ -205,43 +215,55 @@ class Controller:
 
     def handle_controls(gesture, hand_result):  
         x,y = None,None
-        if gesture != Gest.PALM :
+        if gesture != Gesture.PALM :
             x,y = Controller.get_position(hand_result)
-        if gesture != Gest.FIST and Controller.grabflag:
+        if gesture != Gesture.FIST and Controller.grabflag:
             Controller.grabflag = False
             pyautogui.mouseUp(button = "left")
-        if gesture != Gest.PINCH_MAJOR and Controller.pinchmajorflag:
+        if gesture != Gesture.PINCH_Maj and Controller.pinchmajorflag:
             Controller.pinchmajorflag = False
-        if gesture != Gest.PINCH_MINOR and Controller.pinchminorflag:
-            Controller.pinchminorflag = False
-        if gesture == Gest.V_GEST:
+       
+        if gesture == Gesture.V_GESTURE:
             Controller.flag = True
-            pyautogui.moveTo(x, y, duration = 0.1)
-        elif gesture == Gest.FIST:
+            pyautogui.moveTo(x, y, duration = 0.01)
+        elif gesture == Gesture.FIST:
             if not Controller.grabflag : 
                 Controller.grabflag = True
                 pyautogui.mouseDown(button = "left")
             pyautogui.moveTo(x, y, duration = 0.1)
-        elif gesture == Gest.MID and Controller.flag:
-            pyautogui.click()
+        elif gesture == Gesture.PINKY and Controller.flag:
+            Controller.shutdown()
             Controller.flag = False
-        elif gesture == Gest.INDEX and Controller.flag:
+        elif gesture == Gesture.FIRSTLAST and Controller.flag:
+            point = [[8,20],[5,17]]
+            Controller.restart()
+            Controller.flag = False
+        elif gesture == Gesture.MID and Controller.flag:
             pyautogui.click(button='right')
             Controller.flag = False
-        elif gesture == Gest.TWO_FINGER_CLOSED and Controller.flag:
+        elif gesture == Gesture.INDEX and Controller.flag:
+            pyautogui.click(button='left')
+            Controller.flag = False
+        elif gesture == Gesture.TWO_FINGER_CLOSED and Controller.flag:
             pyautogui.doubleClick()
             Controller.flag = False
-        elif gesture == Gest.PINCH_MAJOR:
+        elif gesture == Gesture.LAST2 and Controller.flag:
+            Controller.close()
+            Controller.flag = False
+        elif gesture == Gesture.PINCH_Maj:
             if Controller.pinchmajorflag == False:
                 Controller.pinch_control_init(hand_result)
                 Controller.pinchmajorflag = True
             Controller.pinch_control(hand_result,Controller.scrollHorizontal, Controller.scrollVertical)
-        elif gesture == Gest.PINCH_MINOR:
-            if Controller.pinchminorflag == False:
-                Controller.pinch_control_init(hand_result)
-                Controller.pinchminorflag = True
-            Controller.pinch_control(hand_result,Controller.shutdown, Controller.restart)
-
+        elif gesture == Gesture.MIDRING and Controller.flag:
+            pyautogui.hotkey('winleft')
+            pyautogui.typewrite('edge\n',0.2)
+            pyautogui.typewrite('https://srmap.edu.in/faculty/dr-elakkiya-e/\n',0.05)
+            Controller.flag = False
+       
+        elif gesture == Gesture.FIRST3 and not Controller.flag:
+            Controller.switchtab()
+            Controller.flag = True
 
 class GestureController:
     gc_mode = 0
@@ -284,9 +306,9 @@ class GestureController:
             GestureController.hr_minor = right
 
     def start(self):
-        handmajor = HandRecog(HLabel.MAJOR)
-        handminor = HandRecog(HLabel.MINOR)
-        with mp_hands.Hands(max_num_hands = 2,min_detection_confidence=0.5, min_tracking_confidence=0.5) as hands:
+        handmajor = HandRecog(Hand_Label.Maj)
+        handminor = HandRecog(Hand_Label.Min)
+        with mp_hands.Hands(max_num_hands = 2) as hands:
             while GestureController.cap.isOpened() and GestureController.gc_mode:
                 success, image = GestureController.cap.read()
                 if not success:
@@ -304,7 +326,7 @@ class GestureController:
                     handmajor.set_finger_state()
                     handminor.set_finger_state()
                     gest_name = handminor.get_gesture()
-                    if gest_name == Gest.PINCH_MINOR:
+                    if gest_name == Gesture.PINCH_Min:
                         Controller.handle_controls(gest_name, handminor.hand_result)
                     else:
                         gest_name = handmajor.get_gesture()
